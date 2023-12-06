@@ -16,8 +16,6 @@ import glob
 import scipy.io as sio
 from model_structure import unet3plus
 
-# 忽略所有警告
-warnings.filterwarnings("ignore")
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 assert len(gpus) > 0, "Not enough GPU hardware devices available"
@@ -54,6 +52,7 @@ class Denoiser:
             xt = (xt - tf.reduce_mean(xt,axis=1,keepdims=True))/(tf.math.reduce_std(xt,axis=1,keepdims=True))
         return xt
 
+
 if __name__=='__main__':
     args.samplemethod = 'ddpm'
     modelpath = "./Denoiser"
@@ -65,14 +64,14 @@ if __name__=='__main__':
     if not os.path.exists(figpath):
         os.mkdir(figpath)
 
-    model = tf.keras.models.load_model(modelpath)
+    model = tf.keras.models.load_model(modelpath, compile=False)
     forward_noiser=ForwardDiffusion(args.time_steps)
     alphas = forward_noiser.alphas
     betas = forward_noiser.betas
     alpha_hats =forward_noiser.alpha_hat
 
-    # 需要处理的数据
-    target_path = '.Data_set/single_arm/Device_Data2/'
+    # 需要处理的数据 
+    target_path = "/home/hhlf_min/Win_PC_Pycharm/ECG_Denoising/Data_set/single arm/Device_Data2/"
     ecgpaths = glob.glob(target_path + "*.mat")
     datas = [sio.loadmat(f)['mydata'] for f in ecgpaths]
     idx=0
@@ -87,13 +86,12 @@ if __name__=='__main__':
         # mean_val=np.mean(ecgdata)
         # index = ecgdata[0] > 3 * mean_val
         # ecgdata[0, index] = mean_val
-        Zero_Length = args.ecglen-Signal_Length%args.ecglen
+        Zero_Length = args.ecglen-Signal_Length%args.ecglen  # 计算将数据补足到1024的整数倍，应该填充的长度。
 
         ecgdata_paddings = np.concatenate([ecgdata[:,:Signal_Length],ecgdata[:,-Zero_Length:]],axis=1)
         ecgdata_reshaped = ecgdata_paddings.reshape(-1,args.ecglen)
         ecgdata_reshaped = np.expand_dims(ecgdata_reshaped,axis=-1)
-        ecgdata_reshaped = (ecgdata_reshaped - np.mean(ecgdata_reshaped, axis=1)[:, None]) / np.std(ecgdata_reshaped, axis=1)[:,
-                                                                                    None]
+        ecgdata_reshaped = (ecgdata_reshaped - np.mean(ecgdata_reshaped, axis=1)[:, None]) / np.std(ecgdata_reshaped, axis=1)[:,None] # 对数据进行标准化处理
 
         ecgdata_reshaped = tf.cast(ecgdata_reshaped,dtype=tf.float32)
         denoised_ecgdata = Denoiser_main.get_denoised(ecgdata_reshaped)
