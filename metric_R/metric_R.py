@@ -5,6 +5,8 @@ import numpy as np
 import scipy.io as scio
 import scipy.io
 import matplotlib.pyplot as plt
+import biosppy.signals.ecg
+
 
 """
     cpsc2018  500Hz采样率 12导联心律失常分类任务
@@ -62,12 +64,13 @@ class mitbih_arryth_read():
 """
     cpsc2019 R波识别任务
     http://2019.icbeb.org/Challenge.html
-
 """
 
 cpsc2019_data_path = "./Data_set/cpsc2019/train/data/"
 cpsc2019_ref_path = "./Data_set/cpsc2019/train/ref/"
-cpsc2019_R_figpath = "./results/cpsc2019_R_result/fig/"
+cpsc2019_R_figpath = "./results/cpsc2019_R_result/R_fig/"
+
+cpsc2019_Hamilton_R_mat = "./results/cpsc2019_R_result/Hamilton_R_mat/"
 
 '''
 # CPSC2019 R波识别可视化
@@ -105,7 +108,79 @@ def CPSC2019R_Visible():
 
 
 
+'''
+# CPSC2019 R波识别可视化
+'''
+def CPSC2019_R_Visible():
 
+    # 获取所有的.mat文件
+    data_files = [file for file in os.listdir(cpsc2019_data_path) if file.endswith('.mat')]
+
+    # 循环处理
+    for data_file_name in data_files[0:20]:
+        ref_file_name = 'R'+data_file_name[4:]
+        # 读取数据
+        ecg_data = scipy.io.loadmat(cpsc2019_data_path+data_file_name)['ecg']
+        r_peak_data = scipy.io.loadmat(cpsc2019_ref_path+ref_file_name)['R_peak'].flatten()
+
+        # 信号长度和采样率
+        signal_length = len(ecg_data)
+
+        # 对ECG信号应用Hamilton R波检测算法
+        Hamilton_rpeaks = biosppy.signals.ecg.hamilton_segmenter(ecg_data.T[0], sampling_rate=500)[0]
+        # 保存R波检测的结果
+        scio.savemat(cpsc2019_Hamilton_R_mat+ref_file_name, {'R_peak': Hamilton_rpeaks.T})
+
+        # 对ECG信号应用Pan-Tompkins R波检测算法 
+        rpeaks = biosppy.signals.ecg.pan_tompkins_detector(ecg_data, sampling_rate=500)[0]  
+
+
+        # 计算时间轴
+        sampling_rate = 500  # 采样率为500Hz
+        duration = 10  # 信号长度为10秒
+        time = np.arange(0, duration, 1/sampling_rate)
+
+        # 绘制ECG图
+        plt.figure(figsize=(12, 6))
+        plt.plot(time, ecg_data, label='ECG Signal')
+        plt.scatter(r_peak_data/sampling_rate, ecg_data[r_peak_data], color='red', label='R Peaks', marker='x')
+        plt.scatter(Hamilton_rpeaks/sampling_rate, ecg_data[Hamilton_rpeaks], color='blue', label=' Hamilton  Detected R Peaks', marker='H')
+        plt.title('ECG Signal with R Peak Markers')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Amplitude')
+        plt.legend()
+        # plt.show()
+        plt.savefig(cpsc2019_R_figpath+data_file_name[:-4]+'.jpg',dpi=600)
+        plt.close()
+
+
+
+"""
+使用 Hamilton 算法去检测CPSC2019数据库中的R波位置
+
+"""
+
+
+# #读取数据
+# data_file = 'data路径/data_00011.mat'
+# ref_file = 'ref路径/R_00011.mat'
+
+# ecg_data = scipy.io.loadmat(data_file)['ecg']
+# r_peak_data = scipy.io.loadmat(ref_file)['R_peak'].flatten()
+
+# # 对ECG信号应用Hamilton R波检测算法
+# rpeaks = biosppy.signals.ecg.hamilton_segmenter(ecg_data, sampling_rate=500)[0]
+
+# # 绘制ECG图并标记R波位置
+# plt.figure(figsize=(12, 6))
+# plt.plot(ecg_data, label='ECG Signal')
+# plt.scatter(r_peak_data, ecg_data[r_peak_data], color='red', label='True R Peaks', marker='x')
+# plt.scatter(rpeaks, ecg_data[rpeaks], color='blue', label='Detected R Peaks', marker='o')
+# plt.title('ECG Signal with R Peaks Detection')
+# plt.xlabel('Sample Index')
+# plt.ylabel('Amplitude')
+# plt.legend()
+# plt.show()
 
 
 
@@ -117,7 +192,7 @@ if __name__ == "__main__":
     # print(len(mitbih_arryth_ecg_names))
     # data = mitbih_arryth_read(mitbih_arryth_ecg_names[0])
 
-    CPSC2019R_Visible()
+    CPSC2019_R_Visible()
     pass
 
 
