@@ -166,17 +166,25 @@ def CPSC2020_denoiser():
         # 读取心电信号
         data_path = os.path.join(cpsc2020_500hz_data_path, data_file_name)
         ecg_mat_data = scipy.io.loadmat(data_path)
-        all_ecg_data = ecg_mat_data['ecg'].flatten()  # 一段ECG数据太长了，分割为片段后再处理
-
+        all_ecg_data = ecg_mat_data['ecg'].flatten()  # 一段ECG数据太长了，
         # 创建存储图片的子文件夹
         fig_subfolder = os.path.join(Denoised_cpsc2020_fig, data_file_name[:-4])
         os.makedirs(fig_subfolder, exist_ok=True)
 
-        samples_per_segment = 500*60*5  # 按五分钟一个片段进行去噪处理
+        # 按5分钟进行一段段处理
+        ecg_segment_duration = 60*5
+        # 计算可以分割的段数
+        total_duration = len(all_ecg_data)
+        num_segments = int(np.ceil(total_duration / (500*ecg_segment_duration)))
+
         all_denoised_ecgdata = []
         # 一段段遍历
-        for seg_i in range(0, len(all_ecg_data), samples_per_segment):
-            ecg_data = all_ecg_data[seg_i:seg_i+samples_per_segment] # 一小段一小段处理
+        for seg_i in tqdm(range(num_segments), desc=f"Processing Segments - {data_file_name[:-4]}", unit="segment"):
+        
+            # 计算当前段的起始和结束索引
+            start_index = seg_i * int(ecg_segment_duration * 500)
+            end_index = np.min([(seg_i + 1)*int(ecg_segment_duration*500), len(all_ecg_data)])
+            ecg_data = all_ecg_data[start_index:end_index] # 分割为片段后再处理、一小段一小段处理
 
             Signal_Length = len(ecg_data) 
             if Signal_Length<args.ecglen:
@@ -206,13 +214,13 @@ def CPSC2020_denoiser():
 
 
             """
-                现在开始对没各片段进行绘图处理，绘图并保存绘图的结果
+                现在开始对没各片段进行绘图处理，绘图并保存绘图的结果、图片可视化按10s一段信号进行可视化
             """
-            # 计算每个片段的时间范围
-            segment_duration = 10  # 每段10秒
-            num_segments = len(denoised_ecgdata) // (500 * segment_duration)  # 一段ecg片段按10s分割，则共有的ECG片段数量
+            # 计算每个画图片段的时间范围
+            fig_seg_dur = 10  # 每段10秒
+            fig_num_segments = len(denoised_ecgdata) // (500 * fig_seg_dur)  # 一段ecg片段按10s分割，则共有的ECG片段数量
 
-            time_ranges = [(i * segment_duration, (i + 1) * segment_duration) for i in range(num_segments)]
+            time_ranges = [(i * fig_seg_dur, (i + 1) * fig_seg_dur) for i in range(fig_num_segments)]
             # 绘制图形并保存
             for fig_i, (start_time, end_time) in enumerate(time_ranges):
                 segment_indices = np.arange(start_time * 500, end_time * 500)
@@ -270,8 +278,6 @@ def CPSC2020_denoiser():
         all_denoised_ecgdata = np.concatenate(all_denoised_ecgdata, axis=1)
         # 保存抗噪后的数据为mat文件
         scipy.io.savemat(Denoised_cpsc2020_mat+data_file_name, {'ecg_orl': all_ecg_data,'ecg_de':all_denoised_ecgdata})
-
-
 
 
 
