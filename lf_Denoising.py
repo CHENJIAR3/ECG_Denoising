@@ -5,7 +5,8 @@
 
 import os
 import math
-import scipy.io 
+from tqdm import tqdm
+import scipy.io
 import numpy as np
 from  utils import args
 from Denoising import Denoiser
@@ -51,6 +52,10 @@ def ecg_processing(data):
 
 
 
+
+
+
+
 if __name__=='__main__':
 
     Denoiser_main=Denoiser(modelpath)
@@ -66,7 +71,8 @@ if __name__=='__main__':
 
 
     # 循环依次处理每个文件
-    for data_file_name in data_files:#[0:3]:
+    print("total files",len(data_files))
+    for data_file_name in tqdm(data_files[:], desc="Processing Files", unit="step"):
         ref_file_name = 'R'+data_file_name[4:]
         # 读取数据
         ecg_data = scipy.io.loadmat(cpsc2019_data_path+data_file_name)['ecg']
@@ -152,9 +158,8 @@ if __name__=='__main__':
         # plt.axis([0, 10,-1.5, 1.5])
         plt.xlabel('Time', fontsize=13)
         plt.ylabel('Amplitude', fontsize=13)
-        plt.savefig(Denoised_cpsc2019_fig+data_file_name[:-4]+'.jpg',dpi=600)
+        plt.savefig(Denoised_cpsc2019_fig+data_file_name[:-4]+'.jpg',dpi=100) # 一般的屏幕显示dip100将足够了、科学出版物用dip600左右比较好  
         plt.close()
 
     print("Finishing...")
 
-    
