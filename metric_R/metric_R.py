@@ -296,8 +296,6 @@ def CPSC2019_or_de_R_Calcu():
         scipy.io.savemat(cpsc2019_De_R_mat+ref_file_name, {'true_r_peak_data':true_r_peak_data, 'or_Hamilton_rpeaks':or_Hamilton_rpeaks,'de_Hamilton_rpeaks':de_Hamilton_rpeaks \
                         ,'or_Pan_rpeaks':or_Pan_rpeaks, 'de_Pan_rpeaks':de_Pan_rpeaks})
 
-
-
         # 图片绘制、及R波定位结果可视化
         a=plt.figure()
         a.set_size_inches(12, 10)
