@@ -159,7 +159,12 @@ Denoised_cpsc2020_fig =  "./results/Denoised_cpsc2020/fig/"
 """
 def CPSC2020_denoiser():
     Denoiser_main=Denoiser(modelpath)
-    
+    model = tf.keras.models.load_model(modelpath, compile=False)
+    forward_noiser=ForwardDiffusion(args.time_steps)
+    alphas = forward_noiser.alphas
+    betas = forward_noiser.betas
+    alpha_hats =forward_noiser.alpha_hat
+
     # 获取所有的心电数据.mat文件
     data_files = [file for file in os.listdir(cpsc2020_500hz_data_path) if file.endswith('.mat')]
     for data_file_name in tqdm(data_files[0:], desc="Processing Files", unit="step"):
@@ -210,7 +215,7 @@ def CPSC2020_denoiser():
 
 
             # 将处理好的段添加到列表中
-            all_denoised_ecgdata.append(denoised_ecgdata)       
+            all_denoised_ecgdata.append(denoised_ecgdata.flatten())       
 
 
             """
@@ -245,7 +250,7 @@ def CPSC2020_denoiser():
                 plt.plot(segment_indices/sampling_rate,ecg_data[segment_indices],linewidth=0.7,color='k')
                 ax.grid(which='minor', alpha=0.2,color='r')
                 ax.grid(which='major', alpha=0.5,color='r')  
-                plt.title("Original ECG", fontsize=15)
+                plt.title(f"Original ECG Signal - {data_file_name[:-4]}-Block {seg_i} -Segment {fig_i}", fontsize=15)
                 plt.xlabel('Time ', fontsize=13)
                 plt.ylabel('Amplitude', fontsize=13)
  
@@ -271,11 +276,14 @@ def CPSC2020_denoiser():
                 plt.xlabel('Time', fontsize=13)
                 plt.ylabel('Amplitude', fontsize=13)
                 plt.xticks()
+                plt.legend()
+                plt.grid(True)
+                plt.show()
                 plt.savefig(fig_subfolder+'/'+data_file_name[:-4]+'_'+str(seg_i)+'_'+str(fig_i)+'.jpg',dpi=100) # 一般的屏幕显示dip100将足够了、科学出版物用dip600左右比较好  
                 plt.close()
 
         # 最后将所有段拼接成一个大的数组
-        all_denoised_ecgdata = np.concatenate(all_denoised_ecgdata, axis=1)
+        all_denoised_ecgdata = np.concatenate(all_denoised_ecgdata, axis=0)
         # 保存抗噪后的数据为mat文件
         scipy.io.savemat(Denoised_cpsc2020_mat+data_file_name, {'ecg_orl': all_ecg_data,'ecg_de':all_denoised_ecgdata})
 
