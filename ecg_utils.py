@@ -8,7 +8,7 @@ from scipy.io import loadmat
 from scipy.signal import resample
 import scipy.io
 from tqdm import tqdm
-
+import biosppy.signals.ecg
 
 
 # 文件路径
@@ -149,13 +149,12 @@ def MIT_BIH_AR_Resample_to_500():
         resampled_mlii_ecg = resample(ecg_data[0], int(new_sampling_rate*(or_sig_len/original_sampling_rate)))
         resampled_v1_ecg = resample(ecg_data[1], int(new_sampling_rate*(or_sig_len/original_sampling_rate)))
 
+        # 重采样 R 波标记
+        resampled_r_peaks = [int((peak*new_sampling_rate)/original_sampling_rate) for peak in r_peaks]
+        
         # 保存重采样后的心电数据为.mat文件
         data_save_path = os.path.join(mit_bih_ar_500hz_data_path, f'{ecg_name}.mat')
         scipy.io.savemat(data_save_path, {'mlii_ecg':resampled_mlii_ecg,'v1_ecg':resampled_v1_ecg})
-
-        # 重采样 R 波标记
-        resampled_r_peaks = (r_peaks / original_sampling_rate) * new_sampling_rate
-
         # 保存重采样后的 R 波标记为.mat文件
         ref_save_path = os.path.join(mit_bih_ar_500hz_ref_path, f'{ecg_name}.mat')
         scipy.io.savemat(ref_save_path, {'r_peaks': resampled_r_peaks})
@@ -163,10 +162,94 @@ def MIT_BIH_AR_Resample_to_500():
 
 
 """
-    对 MIT_BIH_AR 数据集重采样后500Hz的信号进行R波位置的可视化呈现，并将呈现结果以图片形式进行存储
+    对 MIT_BIH_AR 数据集重采样后500Hz的信号进行R波位置的可视化呈现，并将可视化结果以图片形式进行存储
+    R 波位置可视化包含：
+                    1、真实的R波位置
+                    2、Hamilton R波定位算法定位的R波位置
 """
+mit_bih_ar_500hz_fig_path = './Data_set/mit_bih_ar_500hz/fig/'
 def MIT_BIH_AR_R_Visible():
-    pass
+    # 循环依次处理每个文件
+    # 循环依次处理每个文件
+    for ecg_name in tqdm(mitbih_arryth_ecg_names, desc="Processing Files", unit="step"):
+        # 读取重采样后的ecg数据和r波标签
+        ecg_data_path = os.path.join(mit_bih_ar_500hz_data_path, f'{ecg_name}.mat')
+        r_peaks_path = os.path.join(mit_bih_ar_500hz_ref_path, f'{ecg_name}.mat')
+
+        ecg_data = scipy.io.loadmat(ecg_data_path)
+        r_peaks = scipy.io.loadmat(r_peaks_path)['r_peaks'].flatten()
+
+        # 创建存储图片的子文件夹
+        fig_subfolder = os.path.join(mit_bih_ar_500hz_fig_path, ecg_name)
+        os.makedirs(fig_subfolder, exist_ok=True)
+        
+        # 分别获得原始记录中，的两个导联的数据
+        mlii_ecg = ecg_data['mlii_ecg'].flatten()
+        v1_ecg = ecg_data['v1_ecg'].flatten()
+
+        # 对ECG信号应用 Hamilton R波检测算法
+        mlii_ecg_Hamilton_rpeaks = biosppy.signals.ecg.hamilton_segmenter(mlii_ecg, sampling_rate=500)[0]
+        v1_ecg_Hamilton_rpeaks = biosppy.signals.ecg.hamilton_segmenter(v1_ecg, sampling_rate=500)[0]
+
+
+        # 计算每个片段的时间范围
+        segment_duration = 10  # 每段10秒
+        num_segments = len(mlii_ecg) // (500 * segment_duration)  # 一段ecg片段按10s分割，则共有的ECG片段数量
+        time_ranges = [(i * segment_duration, (i + 1) * segment_duration) for i in range(num_segments)]
+
+        # 绘制图形并保存
+        for seg_i, (start_time, end_time) in enumerate(time_ranges):
+            plt.figure(figsize=(12, 6))
+
+            # Subplot for lead mlii
+            plt.subplot(2, 1, 1)
+            segment_indices = np.arange(start_time * 500, end_time * 500)
+
+            plt.plot(segment_indices / 500, mlii_ecg[segment_indices])
+            true_plot_r_peaks_range = (r_peaks >= segment_indices[0]) & (r_peaks < segment_indices[-1])
+
+            ham_mlii_r_range = (mlii_ecg_Hamilton_rpeaks >= segment_indices[0]) & (mlii_ecg_Hamilton_rpeaks < segment_indices[-1])
+            ham_v1_r_range = (v1_ecg_Hamilton_rpeaks >= segment_indices[0]) & (v1_ecg_Hamilton_rpeaks < segment_indices[-1])
+
+            plt.scatter((r_peaks[true_plot_r_peaks_range]) / 500,
+                        mlii_ecg[r_peaks[true_plot_r_peaks_range]],
+                        color='red', marker='o', label='R peaks')
+            
+            plt.scatter(mlii_ecg_Hamilton_rpeaks[ham_mlii_r_range] / 500, 
+                        mlii_ecg[mlii_ecg_Hamilton_rpeaks[ham_mlii_r_range]], 
+                        color='blue', label=' Hamilton R Peaks', marker='H')
+
+            plt.title(f'ECG Signal - {ecg_name} - Seg {seg_i + 1} - Lead mlii')
+            plt.xlabel('Time (s)')
+            plt.ylabel('Amplitude')
+            plt.legend()
+            plt.grid(True)
+
+
+            # Subplot for lead v1
+            plt.subplot(2, 1, 2)
+            plt.plot(segment_indices / 500, v1_ecg[segment_indices])
+            plt.scatter((r_peaks[true_plot_r_peaks_range]) / 500,
+                        v1_ecg[r_peaks[true_plot_r_peaks_range]],
+                        color='red', marker='o', label='R peaks')
+            
+            plt.scatter(v1_ecg_Hamilton_rpeaks[ham_v1_r_range]/500, 
+                        v1_ecg[v1_ecg_Hamilton_rpeaks[ham_v1_r_range]], 
+                        color='black', label=' Hamilton R Peaks', marker='H')
+            
+            plt.title(f'ECG Signal - {ecg_name} - Seg {seg_i + 1} - Lead v1')
+            plt.xlabel('Time (s)')
+            plt.ylabel('Amplitude')
+            plt.legend()
+            plt.grid(True)
+
+            # Adjust layout
+            plt.tight_layout()
+            # 保存图像
+            fig_name = f"{ecg_name}_Seg_{seg_i + 1}.jpg"
+            fig_path = os.path.join(fig_subfolder, fig_name)
+            plt.savefig(fig_path, dpi=100)
+            plt.close()
 
 
 
@@ -174,7 +257,8 @@ def MIT_BIH_AR_R_Visible():
 if __name__ == "__main__":
     # CPSC2020_Resample_to_500()
     # CPSC2020_R_Visible()
-    MIT_BIH_AR_Resample_to_500()
+    # MIT_BIH_AR_Resample_to_500()
+    MIT_BIH_AR_R_Visible()
 
 
 
