@@ -217,7 +217,6 @@ def CPSC2020_denoiser():
             # 将处理好的段添加到列表中
             all_denoised_ecgdata.append(denoised_ecgdata.flatten())       
 
-
             """
                 现在开始对没各片段进行绘图处理，绘图并保存绘图的结果、图片可视化按10s一段信号进行可视化
             """
@@ -229,6 +228,10 @@ def CPSC2020_denoiser():
             # 绘制图形并保存
             for fig_i, (start_time, end_time) in enumerate(time_ranges):
                 segment_indices = np.arange(start_time * 500, end_time * 500)
+
+                # 原始数据中数据值太小的，就不要画图了，容易卡住
+                if(abs(np.mean(ecg_data[segment_indices],axis=0)) <= 1e-4):
+                    continue
 
                 sampling_rate = 500
                 a=plt.figure()
@@ -276,7 +279,6 @@ def CPSC2020_denoiser():
                 plt.xlabel('Time', fontsize=13)
                 plt.ylabel('Amplitude', fontsize=13)
                 plt.xticks()
-                plt.legend()
                 plt.grid(True)
                 plt.show()
                 plt.savefig(fig_subfolder+'/'+data_file_name[:-4]+'_'+str(seg_i)+'_'+str(fig_i)+'.jpg',dpi=100) # 一般的屏幕显示dip100将足够了、科学出版物用dip600左右比较好  
@@ -286,6 +288,11 @@ def CPSC2020_denoiser():
         all_denoised_ecgdata = np.concatenate(all_denoised_ecgdata, axis=0)
         # 保存抗噪后的数据为mat文件
         scipy.io.savemat(Denoised_cpsc2020_mat+data_file_name, {'ecg_orl': all_ecg_data,'ecg_de':all_denoised_ecgdata})
+
+
+
+
+
 
 
 
