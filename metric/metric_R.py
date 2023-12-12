@@ -1,6 +1,5 @@
 # This file is used to calculate the change of R-wave calculation accuracy before and after signal denoising
 import os
-import wfdb
 import math
 import pandas as pd
 import numpy as np
@@ -19,48 +18,6 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 
 """
 
-"""
-    数据库: mit-bih-arrhythmia-database-1.0.0
-    https://www.physionet.org/content/mitdb/1.0.0/
-    48个半小时 双导联 MLII和V1导联  动态心电图记录
-    数据采样率 360Hz, 11位数据分辨率、
-"""
-mitbih_arryth_ecg_names = ['100', '101', '102', '103', '104', '105', '106', '107', '108',
- '109', '111', '112', '113', '114', '115', '116', '117', '118', '119', '121',
- '122', '123', '124', '200', '201','202', '203', '205', '207', '208', '209',
- '210', '212', '213', '214', '215', '217', '219', '220', '221', '222', '223',
- '228', '230', '231', '232', '233', '234']
-
-
-
-class mitbih_arryth_read():
-    def __init__(self, num, path=None) -> None:
-        if not path:
-            if os.path.exists("../Data_set/mit-bih-arrhythmia-database-1.0.0/"):
-                path = "../Data_set/mit-bih-arrhythmia-database-1.0.0/"
-            elif os.path.exists("./Data_set/mit-bih-arrhythmia-database-1.0.0/"):
-                path = "./Data_set/mit-bih-arrhythmia-database-1.0.0/"
-            else:
-                print("Could not find path")
-                return None
-        self.data = (wfdb.rdrecord(os.path.join(path, str(num)), physical=False)).d_signal
-        self.data = np.array(self.data)
-        self.ann = wfdb.rdann(os.path.join(path, str(num)), extension="atr").__dict__
-        
-    def ann(self,):
-        return self.ann
-    
-    def data(self,):
-        return self.data
-    
-    def r_index(self,):
-        return self.ann['sample']
-    
-    def r_type(self,):
-        return  self.ann['symbol']
-    
-
-
 
 
 
@@ -68,9 +25,6 @@ class mitbih_arryth_read():
     cpsc2019 R波识别任务  fs 500Hz  10s的ecg片段
     http://2019.icbeb.org/Challenge.html
 """
-
-
-
 
 cpsc2019_data_path = "./Data_set/cpsc2019/train/data/"
 cpsc2019_ref_path = "./Data_set/cpsc2019/train/ref/"
@@ -83,7 +37,6 @@ cpsc2019_R_mat = "./results/cpsc2019_R_result/R_mat/"
 
 '''
 # CPSC2019 R波识别可视化
-
 '''
 def CPSC2019R_Visible():
 
@@ -267,7 +220,7 @@ cpsc2019_De_R_mat = "./results/cpsc2019_R_result/De_R_mat/"
 cpsc2019_De_R_fig = "./results/cpsc2019_R_result/De_R_fig/"
 
 
-def CPSC2019_or_de_R_Calcu():
+def CPSC2019_or_de_R_Locate():
     # 获取所有的.mat文件
     sampling_rate = 500  # 采样率为500Hz
     data_files = [file for file in os.listdir(Denoised_cpsc2019_mat) if file.endswith('.mat')]
@@ -287,6 +240,7 @@ def CPSC2019_or_de_R_Calcu():
         or_Hamilton_rpeaks = biosppy.signals.ecg.hamilton_segmenter(or_ecg_data.T[0], sampling_rate=500)[0]
         de_Hamilton_rpeaks = biosppy.signals.ecg.hamilton_segmenter(de_ecg_data.T[0], sampling_rate=500)[0]
 
+
         # 对ECG信号应用Pan-Tompkins R波检测算法 
         detectors = Detectors(500)  # 500是采样率
         or_Pan_rpeaks = detectors.pan_tompkins_detector(or_ecg_data.T[0])
@@ -295,6 +249,8 @@ def CPSC2019_or_de_R_Calcu():
         # 保存R波检测的结果
         scipy.io.savemat(cpsc2019_De_R_mat+ref_file_name, {'true_r_peak_data':true_r_peak_data, 'or_Hamilton_rpeaks':or_Hamilton_rpeaks,'de_Hamilton_rpeaks':de_Hamilton_rpeaks \
                         ,'or_Pan_rpeaks':or_Pan_rpeaks, 'de_Pan_rpeaks':de_Pan_rpeaks})
+
+
 
         # 图片绘制、及R波定位结果可视化
         a=plt.figure()
@@ -429,8 +385,8 @@ def CPSC2019_R_Metric_Calcu():
     for data_file_name in tqdm(data_files[0:], desc="Processing Files", unit="step"):
         # 读取数据
         ecg_R_mat_data = scipy.io.loadmat(cpsc2019_De_R_mat+data_file_name)
-        true_r_peak_data = ecg_R_mat_data['true_r_peak_data'].flatten()  
 
+        true_r_peak_data = ecg_R_mat_data['true_r_peak_data'].flatten()  
         or_Hamilton_rpeaks = ecg_R_mat_data['or_Hamilton_rpeaks'].flatten()   
         de_Hamilton_rpeaks = ecg_R_mat_data['de_Hamilton_rpeaks'].flatten()    
         or_Pan_rpeaks = ecg_R_mat_data['or_Pan_rpeaks'].flatten()   
@@ -457,14 +413,186 @@ def CPSC2019_R_Metric_Calcu():
 
 
 
+
+
+"""
+    该函数同时使用多种R波定位算法，对CPSC2020数据库原始信号和抗噪信号进行R波定位，并记录R波定位结果
+    将r波定位结果，按10s一段一段地进行可视化
+"""
+
+Denoised_cpsc2020_mat = "./results/Denoised_cpsc2020/mat/"  # 抗噪后的数据文件路径
+cpsc2020_500hz_ref_path = "./Data_set/cpsc2020_500hz/ref/"
+
+cpsc2020_De_R_mat = "./results/cpsc2020_R_result/De_R_mat/"
+cpsc2020_De_R_fig = "./results/cpsc2020_R_result/De_R_fig/"
+
+
+def CPSC2020_or_de_R_Locate():
+    # 获取所有的.mat文件
+    sampling_rate = 500  # 采样率为500Hz
+    data_files = [file for file in os.listdir(Denoised_cpsc2020_mat) if file.endswith('.mat')]
+
+    # 循环依次处理每个文件
+    print("total files",len(data_files))
+    for data_file_name in tqdm(data_files[0:], desc="Processing CPSC2020 R_Locate", unit="step"):
+        # 读取数据
+        ecg_mat_data = scipy.io.loadmat(Denoised_cpsc2020_mat+data_file_name)
+        or_ecg_data = ecg_mat_data['ecg_orl'].flatten()   # 原始数据
+        de_ecg_data = ecg_mat_data['ecg_de'].flatten()    # 去噪后的数据
+
+        true_r_peak_data = scipy.io.loadmat(cpsc2020_500hz_ref_path+data_file_name)['r_peaks'].flatten()   # 真实R波标签数据
+
+        # 对ECG信号应用 Hamilton R波检测算法
+        or_Hamilton_rpeaks = biosppy.signals.ecg.hamilton_segmenter(or_ecg_data, sampling_rate=500)[0]
+        de_Hamilton_rpeaks = biosppy.signals.ecg.hamilton_segmenter(de_ecg_data, sampling_rate=500)[0]
+
+
+        # 对ECG信号应用Pan-Tompkins R波检测算法 
+        detectors = Detectors(500)  # 500是采样率
+        or_Pan_rpeaks = detectors.pan_tompkins_detector(or_ecg_data)
+        de_Pan_rpeaks = detectors.pan_tompkins_detector(de_ecg_data)
+
+
+        # # 调试时候用的
+        # or_Hamilton_rpeaks = true_r_peak_data
+        # de_Hamilton_rpeaks = true_r_peak_data
+        # or_Pan_rpeaks = true_r_peak_data
+        # de_Pan_rpeaks = true_r_peak_data
+
+        
+        # 保存R波检测的结果
+        scipy.io.savemat(cpsc2020_De_R_mat+data_file_name, {'true_r_peak_data':true_r_peak_data, 'or_Hamilton_rpeaks':or_Hamilton_rpeaks,'de_Hamilton_rpeaks':de_Hamilton_rpeaks \
+                        ,'or_Pan_rpeaks':or_Pan_rpeaks, 'de_Pan_rpeaks':de_Pan_rpeaks})
+
+
+        # 20231212-13:09发现错误 
+        """
+                or_ecg_data[or_Pan_rpeaks[plot_or_Pan_rpeaks_range]], 
+                TypeError: only integer scalar arrays can be converted to a scalar index
+        """
+        # 所以将R波定位的结果转换为 int、尝试解决
+        or_Hamilton_rpeaks = [int(peak) for peak in or_Hamilton_rpeaks]
+        de_Hamilton_rpeaks = [int(peak) for peak in de_Hamilton_rpeaks]
+        or_Pan_rpeaks = [int(peak) for peak in or_Pan_rpeaks]
+        de_Pan_rpeaks = [int(peak) for peak in de_Pan_rpeaks]
+
+
+        # 创建存储图片的子文件夹
+        fig_subfolder = os.path.join(cpsc2020_De_R_fig, data_file_name[:-4])
+        os.makedirs(fig_subfolder, exist_ok=True)
+        
+        """
+            现在开始对没各片段进行绘图处理，绘图并保存绘图的结果、图片可视化按10s一段信号进行可视化
+        """
+        # 计算每个画图片段的时间范围
+        fig_seg_dur = 10  # 每段10秒
+        fig_num_segments = len(or_ecg_data) // (500 * fig_seg_dur)  # 一段ecg片段按10s分割，则共有的ECG片段数量
+        time_ranges = [(i * fig_seg_dur, (i + 1) * fig_seg_dur) for i in range(fig_num_segments)]
+        # 将一大段ecg信号，分段进行绘制图形并保存
+        for fig_i, (start_time, end_time) in enumerate(time_ranges):
+            segment_indices = np.arange(start_time * 500, end_time * 500)   # 获得绘制该段信号的ecg片段x轴信息
+
+            # 原始数据中数据值太小的，就不要画图了，容易卡住
+            if(abs(np.mean(or_ecg_data[segment_indices],axis=0)) <= 1e-4):
+                continue    
+
+            # 获得绘制该段信号的r波范围点
+            plot_true_r_peaks_range = (true_r_peak_data >= segment_indices[0]) & (true_r_peak_data < segment_indices[-1])
+            plot_or_Hamilton_rpeaks_range = (or_Hamilton_rpeaks >= segment_indices[0]) & (or_Hamilton_rpeaks < segment_indices[-1])
+            plot_de_Hamilton_rpeaks_range = (de_Hamilton_rpeaks >= segment_indices[0]) & (de_Hamilton_rpeaks < segment_indices[-1])
+            plot_or_Pan_rpeaks_range = (or_Pan_rpeaks >= segment_indices[0]) & (or_Pan_rpeaks < segment_indices[-1])
+            plot_de_Pan_rpeaks_range = (de_Pan_rpeaks >= segment_indices[0]) & (de_Pan_rpeaks < segment_indices[-1])
+
+            # 图片绘制、及R波定位结果可视化
+            a=plt.figure()
+            a.set_size_inches(12, 10)
+            ax=plt.subplot(211)
+            major_ticksx = np.arange(0, 10*sampling_rate, 1*sampling_rate)
+            minor_ticksx = np.arange(0, 10*sampling_rate, 0.25*sampling_rate)
+            max = np.max(or_ecg_data[segment_indices]) 
+            min = np.min(or_ecg_data[segment_indices]) 
+            delet = max-min
+            max = math.ceil(max + delet*0.25)
+            min = math.floor(min - delet*0.25)
+            major_ticksy = np.arange(min, max,0.3*delet)
+            minor_ticksy = np.arange(min, max, 0.075*delet)  
+            ax.set_xticks(major_ticksx)
+            ax.set_xticks(minor_ticksx, minor=True)          
+            ax.set_yticks(major_ticksy)
+            ax.set_yticks(minor_ticksy, minor=True)
+
+            plt.plot(segment_indices/sampling_rate,or_ecg_data[segment_indices],linewidth=0.7,color='k')  # 绘制原始数据
+            # 绘制原始数据R波定位结果
+            plt.scatter(true_r_peak_data[plot_true_r_peaks_range]/sampling_rate, 
+                        or_ecg_data[true_r_peak_data[plot_true_r_peaks_range]],
+                        color='red', label='R Peaks', marker='x')
+            plt.scatter(or_Hamilton_rpeaks[plot_or_Hamilton_rpeaks_range]/sampling_rate, 
+                        or_ecg_data[or_Hamilton_rpeaks[plot_or_Hamilton_rpeaks_range]], 
+                        color='blue', label='Hamilton R', marker='H')
+            plt.scatter(or_Pan_rpeaks[plot_or_Pan_rpeaks_range]/sampling_rate, 
+                        or_ecg_data[or_Pan_rpeaks[plot_or_Pan_rpeaks_range]], 
+                        color='black', label='Pan-Tompkins R', marker='s')
+
+            plt.legend(loc='upper right')
+            ax.grid(which='minor', alpha=0.2,color='r')
+            ax.grid(which='major', alpha=0.5,color='r')  
+            plt.title(f'Or ECG - {data_file_name[:-4]}-Seg {fig_i + 1}')
+            plt.xlabel('Time ', fontsize=13)
+            plt.ylabel('Amplitude', fontsize=13)
+            ax2=plt.subplot(212, sharex = ax)
+            major_ticksx = np.arange(0, 10*sampling_rate,1*sampling_rate )
+            minor_ticksx = np.arange(0, 10*sampling_rate, 0.25*sampling_rate)
+            max = np.max(de_ecg_data[segment_indices]) 
+            min = np.min(de_ecg_data[segment_indices]) 
+            delet = max-min
+            max = math.ceil(max + delet*0.25)
+            min = math.floor(min - delet*0.25)
+            major_ticksy = np.arange(min, max,0.3*delet)
+            minor_ticksy = np.arange(min, max, 0.075*delet)  
+            ax2.set_xticks(major_ticksx)
+            ax2.set_xticks(minor_ticksx, minor=True)         
+            ax2.set_yticks(major_ticksy)
+            ax2.set_yticks(minor_ticksy, minor=True)
+
+
+            plt.plot(segment_indices/sampling_rate,de_ecg_data[segment_indices], linewidth=0.7,color='k')
+            # 绘制抗噪后数据R波定位结果
+            plt.scatter(true_r_peak_data[plot_true_r_peaks_range]/sampling_rate, 
+                        or_ecg_data[true_r_peak_data[plot_true_r_peaks_range]],
+                        color='red', label='R Peaks', marker='x')
+            plt.scatter(de_Hamilton_rpeaks[plot_de_Hamilton_rpeaks_range]/sampling_rate, 
+                        de_ecg_data[de_Hamilton_rpeaks[plot_de_Hamilton_rpeaks_range]], 
+                        color='blue', label='Hamilton R', marker='H')
+            plt.scatter(de_Pan_rpeaks[plot_de_Pan_rpeaks_range]/sampling_rate, 
+                        de_ecg_data[de_Pan_rpeaks[plot_de_Pan_rpeaks_range]], 
+                        color='black', label='Pan-Tompkins R', marker='s')
+            plt.legend(loc='upper right')
+            ax2.grid(which='minor', alpha=0.2,color='r')
+            ax2.grid(which='major', alpha=0.5,color='r')  
+            plt.title(f"Denoised ECG {start_time}s——{end_time}s", fontsize=15)
+            plt.xlabel('Time', fontsize=13)
+            plt.ylabel('Amplitude', fontsize=13)
+            fig_name = f"{data_file_name[:-4]}_Seg_{fig_i + 1}.jpg"
+            fig_path = os.path.join(fig_subfolder, fig_name)
+            plt.savefig(fig_path,dpi=100) # 一般的屏幕显示dip100将足够了、科学出版物用dip600左右比较好  
+            plt.close()
+
+
+
 if __name__ == "__main__":
     # print(len(mitbih_arryth_ecg_names))
     # data = mitbih_arryth_read(mitbih_arryth_ecg_names[0])
 
     # CPSC2019_R_Visible()
     # CPSC2019_R_locate()
-    # CPSC2019_or_de_R_Calcu()
-    CPSC2019_or_de_R_Calcu()
+    # CPSC2019_or_de_R_Locate()
     # CPSC2019_R_Metric_Calcu()
+    CPSC2020_or_de_R_Locate()
+
+
     pass
+
+
+
+
 
