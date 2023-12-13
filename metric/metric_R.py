@@ -337,12 +337,15 @@ def calculate_R_metrics(true_peaks, detected_peaks, sampling_rate=500, tolerance
     return TP, FN, FP
 
 def print_metrics_table(title, metrics):
-    columns = ["Total TP", "Total FN", "Total FP", "Precision", "Recall", "F1 Score"]
-    df = pd.DataFrame([metrics], columns=columns)
+    columns = ["title", "Total TP", "Total FN", "Total FP", "Precision", "Recall", "F1 Score"]
+    # 将title 作为新列添加到 metrics 列表
+    metrics_with_title = [title] + list(metrics) 
+    df = pd.DataFrame([metrics_with_title], columns=columns)
     
     print(title)
     print(df)
     print("\n")
+    return df
 
 
 def calculate_total_metrics(TP_list, FN_list, FP_list):
@@ -376,9 +379,17 @@ def CPSC2019_R_Metric_Calcu():
     de_Ham_R_FN = []
     de_Ham_R_FP = []
 
+    # 原始的信号使用 Hamilton 定位R波的情况
+    or_PanT_R_TP = []
+    or_PanT_R_FN = []
+    or_PanT_R_FP = []
+    # 去噪后的信号使用 Hamilton 定位R波的情况
+    de_PanT_R_TP = []
+    de_PanT_R_FN = []
+    de_PanT_R_FP = []
+
     # 获取所有的.mat文件
     data_files = [file for file in os.listdir(cpsc2019_De_R_mat) if file.endswith('.mat')]
-
 
     # 循环依次处理每个文件
     print("total files",len(data_files))
@@ -402,14 +413,38 @@ def CPSC2019_R_Metric_Calcu():
         de_Ham_R_FN.append(FN)
         de_Ham_R_FP.append(FP)
 
+        ## 计算去噪前后，R波定位的性能指标
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,or_Pan_rpeaks)
+        or_PanT_R_TP.append(TP)
+        or_PanT_R_FN.append(FN)
+        or_PanT_R_FP.append(FP)
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,de_Pan_rpeaks)
+        de_PanT_R_TP.append(TP)
+        de_PanT_R_FN.append(FN)
+        de_PanT_R_FP.append(FP)
+
+
 
     # 计算总的性能指标
     or_Hamilton_metrics = calculate_total_metrics(or_Ham_R_TP, or_Ham_R_FN, or_Ham_R_FP)
     de_Hamilton_metrics = calculate_total_metrics(de_Ham_R_TP, de_Ham_R_FN, de_Ham_R_FP)
+    or_PanT_metrics = calculate_total_metrics(or_PanT_R_TP, or_PanT_R_FN, or_PanT_R_FP)
+    de_PanT_metrics = calculate_total_metrics(de_PanT_R_TP, de_PanT_R_FN, de_PanT_R_FP)
 
     # 打印结果
-    print_metrics_table("Original Hamilton Metrics", or_Hamilton_metrics)
-    print_metrics_table("Denoised Hamilton Metrics", de_Hamilton_metrics)
+    df1 = print_metrics_table("Original Ham Metrics", or_Hamilton_metrics)
+    df2 = print_metrics_table("Denoised Ham Metrics", de_Hamilton_metrics)
+    df3 = print_metrics_table("Original PanT Metrics", or_PanT_metrics)
+    df4 = print_metrics_table("Denoised PanT Metrics", de_PanT_metrics)
+
+    # 保存识别到的指标为表格
+    with pd.ExcelWriter('./metric/CPSC2019_R_Metric_Calcu.xlsx', engine='xlsxwriter') as writer:
+        df1.to_excel(writer, sheet_name='Sheet1', index=False)
+        df2.to_excel(writer, sheet_name='Sheet1', index=False, startrow=df1.shape[0] + 2) 
+        df3.to_excel(writer, sheet_name='Sheet1', index=False, startrow=df1.shape[0] + 4) 
+        df4.to_excel(writer, sheet_name='Sheet1', index=False, startrow=df1.shape[0] + 6) 
+
+
 
 
 
@@ -417,19 +452,15 @@ def CPSC2019_R_Metric_Calcu():
 
 """
     该函数同时使用多种R波定位算法，对CPSC2020数据库原始信号和抗噪信号进行R波定位，并记录R波定位结果
-    将r波定位结果，按10s一段一段地进行可视化
 """
-
 Denoised_cpsc2020_mat = "./results/Denoised_cpsc2020/mat/"  # 抗噪后的数据文件路径
 cpsc2020_500hz_ref_path = "./Data_set/cpsc2020_500hz/ref/"
 
 cpsc2020_De_R_mat = "./results/cpsc2020_R_result/De_R_mat/"
-cpsc2020_De_R_fig = "./results/cpsc2020_R_result/De_R_fig/"
 
 
 def CPSC2020_or_de_R_Locate():
     # 获取所有的.mat文件
-    sampling_rate = 500  # 采样率为500Hz
     data_files = [file for file in os.listdir(Denoised_cpsc2020_mat) if file.endswith('.mat')]
 
     # 循环依次处理每个文件
@@ -465,19 +496,29 @@ def CPSC2020_or_de_R_Locate():
                         ,'or_Pan_rpeaks':or_Pan_rpeaks, 'de_Pan_rpeaks':de_Pan_rpeaks})
 
 
-        # 20231212-13:09发现错误 
-        """
-                or_ecg_data[or_Pan_rpeaks[plot_or_Pan_rpeaks_range]], 
-                TypeError: only integer scalar arrays can be converted to a scalar index
-        """
-        # 所以将R波定位的结果转换为 int、尝试解决
-        or_Hamilton_rpeaks = [int(peak) for peak in or_Hamilton_rpeaks]
-        de_Hamilton_rpeaks = [int(peak) for peak in de_Hamilton_rpeaks]
-        or_Pan_rpeaks = [int(peak) for peak in or_Pan_rpeaks]
-        de_Pan_rpeaks = [int(peak) for peak in de_Pan_rpeaks]
+ 
+"""
+    该函数可视化PSC2020数据集去噪前后R波定位情况
+"""
+cpsc2020_De_R_fig = "./results/cpsc2020_R_result/De_R_fig/"
+def CPSC2020_or_de_R_Locate_Plot_save():
+    sampling_rate = 500  # 采样率为500Hz
+    data_files = [file for file in os.listdir(Denoised_cpsc2020_mat) if file.endswith('.mat')]
+    # 循环依次处理每个文件
+    print("total files",len(data_files))
+    for data_file_name in tqdm(data_files[0:], desc="Processing CPSC2020 R plot ", unit="step"):
+        ecg_mat_data = scipy.io.loadmat(Denoised_cpsc2020_mat+data_file_name)
+        or_ecg_data = ecg_mat_data['ecg_orl'].flatten()   # 原始数据
+        de_ecg_data = ecg_mat_data['ecg_de'].flatten()    # 去噪后的数据
 
+        ecg_rpeaks_data = scipy.io.loadmat(cpsc2020_De_R_mat+data_file_name) # 读取R波标签信息
+        true_r_peak_data = ecg_rpeaks_data['true_r_peak_data'].flatten() 
+        or_Hamilton_rpeaks = ecg_rpeaks_data['or_Hamilton_rpeaks'].flatten() 
+        de_Hamilton_rpeaks = ecg_rpeaks_data['de_Hamilton_rpeaks'].flatten() 
+        or_Pan_rpeaks = ecg_rpeaks_data['or_Pan_rpeaks'].flatten() 
+        de_Pan_rpeaks = ecg_rpeaks_data['de_Pan_rpeaks'].flatten()
 
-        # 创建存储图片的子文件夹
+       # 创建存储图片的子文件夹
         fig_subfolder = os.path.join(cpsc2020_De_R_fig, data_file_name[:-4])
         os.makedirs(fig_subfolder, exist_ok=True)
         
@@ -489,7 +530,7 @@ def CPSC2020_or_de_R_Locate():
         fig_num_segments = len(or_ecg_data) // (500 * fig_seg_dur)  # 一段ecg片段按10s分割，则共有的ECG片段数量
         time_ranges = [(i * fig_seg_dur, (i + 1) * fig_seg_dur) for i in range(fig_num_segments)]
         # 将一大段ecg信号，分段进行绘制图形并保存
-        for fig_i, (start_time, end_time) in enumerate(time_ranges):
+        for fig_i, (start_time, end_time) in tqdm(enumerate(time_ranges),desc="R plot ", unit="fig_seg"):
             segment_indices = np.arange(start_time * 500, end_time * 500)   # 获得绘制该段信号的ecg片段x轴信息
 
             # 原始数据中数据值太小的，就不要画图了，容易卡住
@@ -525,7 +566,7 @@ def CPSC2020_or_de_R_Locate():
             # 绘制原始数据R波定位结果
             plt.scatter(true_r_peak_data[plot_true_r_peaks_range]/sampling_rate, 
                         or_ecg_data[true_r_peak_data[plot_true_r_peaks_range]],
-                        color='red', label='R Peaks', marker='x')
+                        color='red', label='True R', marker='x')
             plt.scatter(or_Hamilton_rpeaks[plot_or_Hamilton_rpeaks_range]/sampling_rate, 
                         or_ecg_data[or_Hamilton_rpeaks[plot_or_Hamilton_rpeaks_range]], 
                         color='blue', label='Hamilton R', marker='H')
@@ -559,7 +600,7 @@ def CPSC2020_or_de_R_Locate():
             # 绘制抗噪后数据R波定位结果
             plt.scatter(true_r_peak_data[plot_true_r_peaks_range]/sampling_rate, 
                         or_ecg_data[true_r_peak_data[plot_true_r_peaks_range]],
-                        color='red', label='R Peaks', marker='x')
+                        color='red', label='True R', marker='x')
             plt.scatter(de_Hamilton_rpeaks[plot_de_Hamilton_rpeaks_range]/sampling_rate, 
                         de_ecg_data[de_Hamilton_rpeaks[plot_de_Hamilton_rpeaks_range]], 
                         color='blue', label='Hamilton R', marker='H')
@@ -579,6 +620,249 @@ def CPSC2020_or_de_R_Locate():
 
 
 
+
+
+"""
+    该函数计算CPSC2020数据集去噪前后 R 波定位的性能对比
+"""
+def CPSC2020_R_Metric_Calcu():
+    # 原始的信号使用  定位R波的情况
+    or_Ham_R_TP = []
+    or_Ham_R_FN = []
+    or_Ham_R_FP = []
+    or_PanT_R_TP = []
+    or_PanT_R_FN = []
+    or_PanT_R_FP = []
+    # 去噪后的信号使用  定位R波的情况
+    de_Ham_R_TP = []
+    de_Ham_R_FN = []
+    de_Ham_R_FP = []
+    de_PanT_R_TP = []
+    de_PanT_R_FN = []
+    de_PanT_R_FP = []
+
+    data_files = [file for file in os.listdir(cpsc2020_De_R_mat) if file.endswith('.mat')]
+    # 循环依次处理每个文件
+    print("total files",len(data_files))
+    for data_file_name in tqdm(data_files[0:], desc="Processing CPSC2020 Metric_Calcu ", unit="step"):
+
+        ecg_rpeaks_data = scipy.io.loadmat(cpsc2020_De_R_mat+data_file_name) # 读取R波标签信息
+        true_r_peak_data = ecg_rpeaks_data['true_r_peak_data'].flatten() 
+        or_Hamilton_rpeaks = ecg_rpeaks_data['or_Hamilton_rpeaks'].flatten() 
+        de_Hamilton_rpeaks = ecg_rpeaks_data['de_Hamilton_rpeaks'].flatten() 
+        or_Pan_rpeaks = ecg_rpeaks_data['or_Pan_rpeaks'].flatten() 
+        de_Pan_rpeaks = ecg_rpeaks_data['de_Pan_rpeaks'].flatten()
+    
+        # 计算去噪前后，R波定位的性能指标
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,or_Hamilton_rpeaks)
+        or_Ham_R_TP.append(TP)
+        or_Ham_R_FN.append(FN)
+        or_Ham_R_FP.append(FP)
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,de_Hamilton_rpeaks)
+        de_Ham_R_TP.append(TP)
+        de_Ham_R_FN.append(FN)
+        de_Ham_R_FP.append(FP)
+        # PT 算法
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,or_Pan_rpeaks)
+        or_PanT_R_TP.append(TP)
+        or_PanT_R_FN.append(FN)
+        or_PanT_R_FP.append(FP)
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,de_Pan_rpeaks)
+        de_PanT_R_TP.append(TP)
+        de_PanT_R_FN.append(FN)
+        de_PanT_R_FP.append(FP)
+
+        
+    # 计算总的性能指标
+    or_Hamilton_metrics = calculate_total_metrics(or_Ham_R_TP, or_Ham_R_FN, or_Ham_R_FP)
+    de_Hamilton_metrics = calculate_total_metrics(de_Ham_R_TP, de_Ham_R_FN, de_Ham_R_FP)
+    or_PanT_metrics = calculate_total_metrics(or_PanT_R_TP, or_PanT_R_FN, or_PanT_R_FP)
+    de_PanT_metrics = calculate_total_metrics(de_PanT_R_TP, de_PanT_R_FN, de_PanT_R_FP)
+
+    # 打印结果
+    df1 = print_metrics_table("Original Hamilton Metrics", or_Hamilton_metrics)
+    df2 = print_metrics_table("Denoised Hamilton Metrics", de_Hamilton_metrics)
+    df3 = print_metrics_table("Original PanT Metrics", or_PanT_metrics)
+    df4 = print_metrics_table("Denoised PanT Metrics", de_PanT_metrics)
+
+    # 保存识别到的指标为表格
+    with pd.ExcelWriter('./metric/CPSC2020_R_Metric_Calcu.xlsx', engine='xlsxwriter') as writer:
+        df1.to_excel(writer, sheet_name='Sheet1', index=False)
+        df2.to_excel(writer, sheet_name='Sheet1', index=False, startrow=df1.shape[0] + 2) #startrow=df1.shape[0] + 2 意味着将 df2 添加到 Sheet1 的起始行为 df1 的行数加上 2。
+        df3.to_excel(writer, sheet_name='Sheet1', index=False, startrow=df1.shape[0] + 4)
+        df4.to_excel(writer, sheet_name='Sheet1', index=False, startrow=df1.shape[0] + 6)
+
+
+
+Denoised_mit_bih_ar_mat =  "./results/Denoised_mit_bih_ar/mat/"
+mit_bih_ar_500hz_ref_path = './Data_set/mit_bih_ar_500hz/ref/'
+mit_bih_ar_R_result_path =  './results/mit_bih_ar_R_result/mat/'
+"""
+    该函数同时使用多种R波定位算法，对 MIT BIH  AR 数据库原始信号和抗噪信号进行R波定位，并记录R波定位结果
+"""
+def MIT_BIH_AR_or_de_R_Locate():
+    # 获取所有的.mat文件
+    data_files = [file for file in os.listdir(Denoised_mit_bih_ar_mat) if file.endswith('.mat')]
+
+    # 循环依次处理每个文件
+    print("total files",len(data_files))
+    for data_file_name in tqdm(data_files[0:], desc="Processing MIT_BIH_AR R_Locate", unit="step"):
+        # 读取数据
+        ecg_mat_data = scipy.io.loadmat(Denoised_mit_bih_ar_mat+data_file_name)
+        mill_orl = ecg_mat_data['mill_orl'].flatten()   # 原始数据
+        mill_de = ecg_mat_data['mill_de'].flatten()    # 去噪后的数据
+        v1_orl = ecg_mat_data['v1_orl'].flatten()   # 原始数据
+        v1_de = ecg_mat_data['v1_de'].flatten()    # 去噪后的数据
+
+        true_r_peak_data = scipy.io.loadmat(mit_bih_ar_500hz_ref_path+data_file_name)['r_peaks'].flatten()   # 真实R波标签数据
+
+        # 对ECG信号应用 Hamilton R波检测算法
+        or_mill_Hamilton_rpeaks = biosppy.signals.ecg.hamilton_segmenter(mill_orl, sampling_rate=500)[0]
+        de_mill_Hamilton_rpeaks = biosppy.signals.ecg.hamilton_segmenter(mill_de, sampling_rate=500)[0]
+        or_v1_Hamilton_rpeaks = biosppy.signals.ecg.hamilton_segmenter(v1_orl, sampling_rate=500)[0]
+        de_v1_Hamilton_rpeaks = biosppy.signals.ecg.hamilton_segmenter(v1_de, sampling_rate=500)[0]
+
+        # 对ECG信号应用Pan-Tompkins R波检测算法 
+        detectors = Detectors(500)  # 500是采样率
+        or_mlii_Pan_rpeaks = detectors.pan_tompkins_detector(mill_orl)
+        de_mlii_Pan_rpeaks = detectors.pan_tompkins_detector(mill_de)
+        or_v1_Pan_rpeaks = detectors.pan_tompkins_detector(v1_orl)
+        de_v1_Pan_rpeaks = detectors.pan_tompkins_detector(v1_de)
+
+        # 保存R波检测的结果
+        scipy.io.savemat(mit_bih_ar_R_result_path+data_file_name, {'true_r_peak_data':true_r_peak_data, \
+                                                                   'or_mill_Hamilton_rpeaks':or_mill_Hamilton_rpeaks,\
+                                                                   'de_mill_Hamilton_rpeaks':de_mill_Hamilton_rpeaks, \
+                                                                    'or_v1_Hamilton_rpeaks':or_v1_Hamilton_rpeaks, \
+                                                                    'de_v1_Hamilton_rpeaks':de_v1_Hamilton_rpeaks,\
+                                                                    'or_mlii_Pan_rpeaks':or_mlii_Pan_rpeaks,\
+                                                                    'de_mlii_Pan_rpeaks':de_mlii_Pan_rpeaks,\
+                                                                    'or_v1_Pan_rpeaks':or_v1_Pan_rpeaks,\
+                                                                    'de_v1_Pan_rpeaks':de_v1_Pan_rpeaks})
+
+        
+
+"""
+    该函数计算MIT_BIH_AR_R数据集去噪前后 R 波定位的性能对比
+"""
+def MIT_BIH_AR_R_Metric_Calcu():
+    # 原始的信号使用  定位R波的情况
+    or_mlii_Ham_R_TP = []
+    or_mlii_Ham_R_FN = []
+    or_mlii_Ham_R_FP = []
+    or_mlii_PanT_R_TP = []
+    or_mlii_PanT_R_FN = []
+    or_mlii_PanT_R_FP = []
+    # 去噪后的信号使用  定位R波的情况
+    de_mlii_Ham_R_TP = []
+    de_mlii_Ham_R_FN = []
+    de_mlii_Ham_R_FP = []
+    de_mlii_PanT_R_TP = []
+    de_mlii_PanT_R_FN = []
+    de_mlii_PanT_R_FP = []
+    # 原始的信号使用  定位R波的情况
+    or_v1_Ham_R_TP = []
+    or_v1_Ham_R_FN = []
+    or_v1_Ham_R_FP = []
+    or_v1_PanT_R_TP = []
+    or_v1_PanT_R_FN = []
+    or_v1_PanT_R_FP = []
+    # 去噪后的信号使用  定位R波的情况
+    de_v1_Ham_R_TP = []
+    de_v1_Ham_R_FN = []
+    de_v1_Ham_R_FP = []
+    de_v1_PanT_R_TP = []
+    de_v1_PanT_R_FN = []
+    de_v1_PanT_R_FP = []
+
+    data_files = [file for file in os.listdir(mit_bih_ar_R_result_path) if file.endswith('.mat')]
+    # 循环依次处理每个文件
+    print("total files",len(data_files))
+    for data_file_name in tqdm(data_files[0:], desc="Processing CPSC2020 R Metric_Calcu ", unit="step"):
+
+        ecg_rpeaks_data = scipy.io.loadmat(mit_bih_ar_R_result_path+data_file_name) # 读取R波标签信息
+        true_r_peak_data = ecg_rpeaks_data['true_r_peak_data'].flatten() 
+        or_mill_Hamilton_rpeaks = ecg_rpeaks_data['or_mill_Hamilton_rpeaks'].flatten() 
+        de_mill_Hamilton_rpeaks = ecg_rpeaks_data['de_mill_Hamilton_rpeaks'].flatten() 
+        or_v1_Hamilton_rpeaks = ecg_rpeaks_data['or_v1_Hamilton_rpeaks'].flatten() 
+        de_v1_Hamilton_rpeaks = ecg_rpeaks_data['de_v1_Hamilton_rpeaks'].flatten()
+
+        or_mlii_Pan_rpeaks = ecg_rpeaks_data['or_mlii_Pan_rpeaks'].flatten() 
+        de_mlii_Pan_rpeaks = ecg_rpeaks_data['de_mlii_Pan_rpeaks'].flatten() 
+        or_v1_Pan_rpeaks = ecg_rpeaks_data['or_v1_Pan_rpeaks'].flatten() 
+        de_v1_Pan_rpeaks = ecg_rpeaks_data['de_v1_Pan_rpeaks'].flatten()
+    
+        # 计算去噪前后，R波定位的性能指标
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,or_mill_Hamilton_rpeaks)
+        or_mlii_Ham_R_TP.append(TP)
+        or_mlii_Ham_R_FN.append(FN)
+        or_mlii_Ham_R_FP.append(FP)
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,de_mill_Hamilton_rpeaks)
+        de_mlii_Ham_R_TP.append(TP)
+        de_mlii_Ham_R_FN.append(FN)
+        de_mlii_Ham_R_FP.append(FP)
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,or_v1_Hamilton_rpeaks)
+        or_v1_Ham_R_TP.append(TP)
+        or_v1_Ham_R_FN.append(FN)
+        or_v1_Ham_R_FP.append(FP)
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,de_v1_Hamilton_rpeaks)
+        de_v1_Ham_R_TP.append(TP)
+        de_v1_Ham_R_FN.append(FN)
+        de_v1_Ham_R_FP.append(FP)
+        # PT 算法
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,or_mlii_Pan_rpeaks)
+        or_mlii_PanT_R_TP.append(TP)
+        or_mlii_PanT_R_FN.append(FN)
+        or_mlii_PanT_R_FP.append(FP)
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,de_mlii_Pan_rpeaks)
+        de_mlii_PanT_R_TP.append(TP)
+        de_mlii_PanT_R_FN.append(FN)
+        de_mlii_PanT_R_FP.append(FP)
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,or_v1_Pan_rpeaks)
+        or_v1_PanT_R_TP.append(TP)
+        or_v1_PanT_R_FN.append(FN)
+        or_v1_PanT_R_FP.append(FP)
+        TP, FN, FP = calculate_R_metrics(true_r_peak_data,de_v1_Pan_rpeaks)
+        de_v1_PanT_R_TP.append(TP)
+        de_v1_PanT_R_FN.append(FN)
+        de_v1_PanT_R_FP.append(FP)
+
+        
+    # 计算总的性能指标
+    or_mlii_Hamilton_metrics = calculate_total_metrics(or_mlii_Ham_R_TP, or_mlii_Ham_R_FN, or_mlii_Ham_R_FP)
+    de_mlii_Hamilton_metrics = calculate_total_metrics(de_mlii_Ham_R_TP, de_mlii_Ham_R_FN, de_mlii_Ham_R_FP)
+    or_v1_Hamilton_metrics = calculate_total_metrics(or_v1_Ham_R_TP, or_v1_Ham_R_FN, or_v1_Ham_R_FP)
+    de_v1_Hamilton_metrics = calculate_total_metrics(de_v1_Ham_R_TP, de_v1_Ham_R_FN, de_v1_Ham_R_FP)
+
+    or_mlii_PanT_metrics = calculate_total_metrics(or_mlii_PanT_R_TP, or_mlii_PanT_R_FN, or_mlii_PanT_R_FP)
+    de_mlii_PanT_metrics = calculate_total_metrics(de_mlii_PanT_R_TP, de_mlii_PanT_R_FN, de_mlii_PanT_R_FP)
+    or_v1_PanT_metrics = calculate_total_metrics(or_v1_PanT_R_TP, or_v1_PanT_R_FN, or_v1_PanT_R_FP)
+    de_v1_PanT_metrics = calculate_total_metrics(de_v1_PanT_R_TP, de_v1_PanT_R_FN, de_v1_PanT_R_FP)
+
+    # 打印结果
+    df1 = print_metrics_table("Original MLII Hamilton Metrics", or_mlii_Hamilton_metrics)
+    df2 = print_metrics_table("Denoised MLII Hamilton Metrics", de_mlii_Hamilton_metrics)
+    df3 = print_metrics_table("Original V1 Hamilton Metrics", or_v1_Hamilton_metrics)
+    df4 = print_metrics_table("Denoised V1 Hamilton Metrics", de_v1_Hamilton_metrics)
+    df5 = print_metrics_table("Original MLII PanT Metrics", or_mlii_PanT_metrics)
+    df6 = print_metrics_table("Denoised MLII PanT Metrics", de_mlii_PanT_metrics)
+    df7 = print_metrics_table("Original V1 PanT Metrics", or_v1_PanT_metrics)
+    df8 = print_metrics_table("Denoised V1 PanT Metrics", de_v1_PanT_metrics)
+
+    # 保存识别到的指标为表格
+    with pd.ExcelWriter('./metric/MIT_BIH_AR_R_Metric_Calcu.xlsx', engine='xlsxwriter') as writer:
+        df1.to_excel(writer, sheet_name='Sheet1', index=False)
+        df2.to_excel(writer, sheet_name='Sheet1', index=False, startrow=df1.shape[0] + 2) #startrow=df1.shape[0] + 2 意味着将 df2 添加到 Sheet1 的起始行为 df1 的行数加上 2。
+        df3.to_excel(writer, sheet_name='Sheet1', index=False, startrow=df1.shape[0] + 4)
+        df4.to_excel(writer, sheet_name='Sheet1', index=False, startrow=df1.shape[0] + 6)
+        df5.to_excel(writer, sheet_name='Sheet1', index=False, startrow=df1.shape[0] + 8)
+        df6.to_excel(writer, sheet_name='Sheet1', index=False, startrow=df1.shape[0] + 10)
+        df7.to_excel(writer, sheet_name='Sheet1', index=False, startrow=df1.shape[0] + 12)
+        df8.to_excel(writer, sheet_name='Sheet1', index=False, startrow=df1.shape[0] + 14)
+
+
+
+
 if __name__ == "__main__":
     # print(len(mitbih_arryth_ecg_names))
     # data = mitbih_arryth_read(mitbih_arryth_ecg_names[0])
@@ -586,9 +870,12 @@ if __name__ == "__main__":
     # CPSC2019_R_Visible()
     # CPSC2019_R_locate()
     # CPSC2019_or_de_R_Locate()
-    # CPSC2019_R_Metric_Calcu()
-    CPSC2020_or_de_R_Locate()
-
+    CPSC2019_R_Metric_Calcu()
+    # CPSC2020_or_de_R_Locate()
+    # CPSC2020_or_de_R_Locate_Plot_save()
+    # CPSC2020_R_Metric_Calcu()
+    # MIT_BIH_AR_or_de_R_Locate()
+    # MIT_BIH_AR_R_Metric_Calcu()
 
     pass
 

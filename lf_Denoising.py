@@ -294,13 +294,115 @@ def CPSC2020_denoiser():
 
 
 
+mit_bih_ar_500hz_data_path = './Data_set/mit_bih_ar_500hz/data/'
+Denoised_mit_bih_ar_mat =  "./results/Denoised_mit_bih_ar/mat/"
 
 
+"""
+    对 MIT_BIH_AR 数据集进行去噪，并保存去噪结果的函数 
+"""
+def MIT_BIH_AR_denoiser():
+    Denoiser_main=Denoiser(modelpath)
+    model = tf.keras.models.load_model(modelpath, compile=False)
+    forward_noiser=ForwardDiffusion(args.time_steps)
+    alphas = forward_noiser.alphas
+    betas = forward_noiser.betas
+    alpha_hats =forward_noiser.alpha_hat
+
+        # 获取所有的心电数据.mat文件
+    data_files = [file for file in os.listdir(mit_bih_ar_500hz_data_path) if file.endswith('.mat')]
+    for data_file_name in tqdm(data_files[0:], desc="Processing Files", unit="step"):
+        data_path = os.path.join(mit_bih_ar_500hz_data_path, data_file_name)
+        ecg_mat_data = scipy.io.loadmat(data_path)
+        all_mlii_ecg = ecg_mat_data['mlii_ecg'].flatten() 
+        all_v1_ecg = ecg_mat_data['v1_ecg'].flatten() 
+
+        # 按10分钟一段进行去噪处理
+        ecg_segment_duration = 60*10
+        # 计算可以分割的段数
+        total_duration = len(all_mlii_ecg)
+        num_segments = int(np.ceil(total_duration / (500*ecg_segment_duration)))
+
+        all_mlii_denoised_ecgdata = []
+        #先处理MLII导联 一段段遍历
+        for seg_i in tqdm(range(num_segments), desc=f"Processing Segments - {data_file_name[:-4]}", unit="segment"):
+            # 计算当前段的起始和结束索引
+            start_index = seg_i * int(ecg_segment_duration * 500)
+            end_index = np.min([(seg_i + 1)*int(ecg_segment_duration*500), len(all_mlii_ecg)])
+            ecg_data = all_mlii_ecg[start_index:end_index] # 分割为片段后再处理、一小段一小段处理
+
+            Signal_Length = len(ecg_data) 
+            if Signal_Length<args.ecglen:
+                continue
+            
+            Zero_Length = args.ecglen-Signal_Length%args.ecglen  # 计算将数据补足到1024的整数倍，应该填充的长度。
+            ecgdata_paddings = np.concatenate([ecg_data[:], ecg_data[-Zero_Length:]], axis=0)
+            ecgdata_reshaped = ecgdata_paddings.reshape(-1,args.ecglen)  # 将数据reshape为 N x 1024
+            ecgdata_reshaped = np.expand_dims(ecgdata_reshaped,axis=-1)  
+            ecgdata_reshaped = (ecgdata_reshaped - np.mean(ecgdata_reshaped, axis=1)[:, None]) / np.std(ecgdata_reshaped, axis=1)[:,None] # 对数据进行标准化处理
+            # 转换数据格式并进行抗噪处理
+            ecgdata_reshaped = tf.cast(ecgdata_reshaped,dtype=tf.float32)
+            denoised_ecgdata = Denoiser_main.get_denoised(ecgdata_reshaped)
+            denoised_ecgdata = np.asarray(denoised_ecgdata).reshape(1,-1)
+            denoised_ecgdata = denoised_ecgdata[:,:Signal_Length]
+            # 得到抗噪后信号平滑后的信号
+            window_size = 250
+            smoothed_signal = np.zeros_like((denoised_ecgdata))
+            for i in range(denoised_ecgdata.shape[0]):
+                smoothed_signal[i,:] = np.convolve(denoised_ecgdata [i,:], np.ones(window_size) / window_size, mode='same')
+            denoised_ecgdata=denoised_ecgdata-smoothed_signal
+            denoised_ecgdata = denoised_ecgdata.T  # 再转置回去，确保shape和输入shape一样
+
+
+            # 将处理好的段添加到列表中
+            all_mlii_denoised_ecgdata.append(denoised_ecgdata.flatten())    
+        # 最后将所有段拼接成一个大的数组
+        all_mlii_denoised_ecgdata = np.concatenate(all_mlii_denoised_ecgdata, axis=0)
+
+        all_v1_denoised_ecgdata = []
+        #先处理V1导联 一段段遍历
+        for seg_i in tqdm(range(num_segments), desc=f"Processing Segments - {data_file_name[:-4]}", unit="segment"):
+            # 计算当前段的起始和结束索引
+            start_index = seg_i * int(ecg_segment_duration * 500)
+            end_index = np.min([(seg_i + 1)*int(ecg_segment_duration*500), len(all_mlii_ecg)])
+            ecg_data = all_v1_ecg[start_index:end_index] # 分割为片段后再处理、一小段一小段处理
+
+            Signal_Length = len(ecg_data) 
+            if Signal_Length<args.ecglen:
+                continue
+            
+            Zero_Length = args.ecglen-Signal_Length%args.ecglen  # 计算将数据补足到1024的整数倍，应该填充的长度。
+            ecgdata_paddings = np.concatenate([ecg_data[:], ecg_data[-Zero_Length:]], axis=0)
+            ecgdata_reshaped = ecgdata_paddings.reshape(-1,args.ecglen)  # 将数据reshape为 N x 1024
+            ecgdata_reshaped = np.expand_dims(ecgdata_reshaped,axis=-1)  
+            ecgdata_reshaped = (ecgdata_reshaped - np.mean(ecgdata_reshaped, axis=1)[:, None]) / np.std(ecgdata_reshaped, axis=1)[:,None] # 对数据进行标准化处理
+            # 转换数据格式并进行抗噪处理
+            ecgdata_reshaped = tf.cast(ecgdata_reshaped,dtype=tf.float32)
+            denoised_ecgdata = Denoiser_main.get_denoised(ecgdata_reshaped)
+            denoised_ecgdata = np.asarray(denoised_ecgdata).reshape(1,-1)
+            denoised_ecgdata = denoised_ecgdata[:,:Signal_Length]
+            # 得到抗噪后信号平滑后的信号
+            window_size = 250
+            smoothed_signal = np.zeros_like((denoised_ecgdata))
+            for i in range(denoised_ecgdata.shape[0]):
+                smoothed_signal[i,:] = np.convolve(denoised_ecgdata [i,:], np.ones(window_size) / window_size, mode='same')
+            denoised_ecgdata=denoised_ecgdata-smoothed_signal
+            denoised_ecgdata = denoised_ecgdata.T  # 再转置回去，确保shape和输入shape一样
+
+            # 将处理好的段添加到列表中
+            all_v1_denoised_ecgdata.append(denoised_ecgdata.flatten())    
+
+        # 最后将所有段拼接成一个大的数组
+        all_v1_denoised_ecgdata = np.concatenate(all_v1_denoised_ecgdata, axis=0)
+
+        # 保存抗噪后的数据为mat文件
+        scipy.io.savemat(Denoised_mit_bih_ar_mat+data_file_name, {'mill_orl': all_mlii_ecg,'mill_de':all_mlii_denoised_ecgdata,\
+                                                                  'v1_orl':all_v1_ecg,'v1_de':all_v1_denoised_ecgdata})
 
 if __name__=='__main__':
-    CPSC2020_denoiser()
+    # CPSC2020_denoiser()
+    MIT_BIH_AR_denoiser()
     pass
-
-
+    
 
 
