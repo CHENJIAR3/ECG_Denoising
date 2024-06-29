@@ -1,0 +1,10 @@
+*.png
+环境配置说明书.docx
+.ipynb_checkpoints/
+__pycache__/
+.idea/
+log/
+Data_set/*
+results/
+
+*.mat
