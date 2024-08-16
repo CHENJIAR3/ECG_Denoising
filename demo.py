@@ -1,13 +1,10 @@
 # 去噪函数
-
 import os
-
 import numpy as np
-
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2'
 import matplotlib.pyplot as plt
+
 # 把单导联心电图作为输入信号
-from model_structure import *
 import pickle
 import tensorflow as tf
 from  utils import args
@@ -23,7 +20,6 @@ gpus = tf.config.experimental.list_physical_devices('GPU')
 assert len(gpus) > 0, "Not enough GPU hardware devices available"
 for i in range(len(gpus)):
     tf.config.experimental.set_memory_growth(gpus[i], True)
-strategy = tf.distribute.MirroredStrategy()
 
 if __name__=='__main__':
     args.samplemethod = 'ddpm'
