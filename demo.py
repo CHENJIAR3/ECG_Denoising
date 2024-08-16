@@ -15,7 +15,7 @@ import warnings
 import glob
 import scipy.io as sio
 from model_structure import unet3plus
-from Denoising import Denoiser
+from Denoising import *
 # 忽略所有警告
 warnings.filterwarnings("ignore")
 
@@ -25,26 +25,19 @@ for i in range(len(gpus)):
     tf.config.experimental.set_memory_growth(gpus[i], True)
 strategy = tf.distribute.MirroredStrategy()
 
-
 if __name__=='__main__':
     args.samplemethod = 'ddpm'
     modelpath = "./Denoiser"
+    fs = 100
     Denoiser_1=Denoiser(modelpath)
-
-    # matpath='./results/Denoised_data/'
-    # figpath='./results/Figures/'
-    # if not os.path.exists(matpath):
-    #     os.mkdir(matpath)
-    # if not os.path.exists(figpath):
-    #     os.mkdir(figpath)
 
     model = tf.keras.models.load_model(modelpath)
     forward_noiser=ForwardDiffusion(args.time_steps)
     alphas = forward_noiser.alphas
     betas = forward_noiser.betas
     alpha_hats =forward_noiser.alpha_hat
-    ecg_dir = "/data/chenjiarong/vitaldb_genecg/"
-    deecg_dir = "/data/chenjiarong/vitaldb_genecg_df/"
+    ecg_dir = "original_ecg_path"
+    deecg_dir = "denoised_ecg_path"
     if not os.path.exists(deecg_dir):
         os.mkdir(deecg_dir)
     pkl_files = glob.glob(gecg_dir+"*.pkl")
@@ -53,10 +46,4 @@ if __name__=='__main__':
         print(path)
         with open(path, 'rb') as file:
             data = pickle.load(file)
-        denoised_ecg=Denoising_ECG(Denoiser_1,data["gen_ecg"],100)
-        print(np.mean(denoised_ecg),denoised_ecg.shape)
-        datanew = data.assign(denoised_ecg=denoised_ecg.tolist())
-
-        newpath=deecg_dir+path.split('.')[0].split('/')[-1]+"&gen_ecg_df.pkl"
-        with open(newpath, 'wb') as file:
-            pickle.dump(datanew,file)
+        denoised_ecg=Denoising_ECG(Denoiser_1,data["gen_ecg"],fs)
